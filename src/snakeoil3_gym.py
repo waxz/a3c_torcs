@@ -60,11 +60,10 @@ import requests
 import subprocess
 data_size = 2 ** 17
 
-def send_cmd(worker,port):
+def send_cmd(worker):
 
-    start_cmd={"worker":"worker"+str(worker),"port":port}
+    start_cmd={"worker":str(worker)}
     requests.post("http://127.0.0.1:5000/cmd_api", data=start_cmd)
-
 
 
 def clip(v, lo, hi):
@@ -116,7 +115,7 @@ def bargraph(x, mn, mx, w, c='X'):
 
 class Client():
     def __init__(
-            self, H=None, p=None, i=None, e=None, t=None, s=None, d=None,
+            self, H=None, p=None, i=None, e=None, t=None, s=None, d=None,name=None,
             vision=False):
         # If you don't like the option defaults,  change them here.
         self.vision = vision
@@ -144,6 +143,8 @@ class Client():
             self.stage = s
         if d:
             self.debug = d
+        if name:
+            self.name=name
         self.S = ServerState()
         self.R = DriverAction()
         self.setup_connection()
@@ -157,6 +158,7 @@ class Client():
             sys.exit(-1)
         # == Initialize Connection To Server ==
         self.so.settimeout(1)
+        n_fail=5
 
         while True:
             # This string establishes track sensor angles! You can customize them.
@@ -174,8 +176,12 @@ class Client():
             try:
                 sockdata, _ = self.so.recvfrom(data_size)
                 sockdata = sockdata.decode('utf-8')
-            except socket.error:
+            except socket.error :
+                n_fail -=1
                 print("Waiting for server on %d............" % self.port)
+                if n_fail<0:
+                    print("connection error ,restart torcs")
+                    send_cmd(self.name)
 
             identify = '***identified***'
             if identify in sockdata:

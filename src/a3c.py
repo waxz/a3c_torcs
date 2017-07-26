@@ -189,7 +189,7 @@ class Worker(object):
                 self.episode_mean_values.append(
                     np.mean(episode_values))
 
-                if len(episode_buffer) != 0:
+                if len(episode_buffer) >5 :
                     # Train the netowkr use the recent episodes
                     (value_loss, policy_loss, gradient_norm,
                      variable_norm) = self.train(
@@ -281,7 +281,8 @@ class A3C(object):
         """
         with tf.device("/cpu:0"):
 
-            trainer = tf.train.AdamOptimizer(learning_rate=1e-4)
+            # trainer = tf.train.AdamOptimizer(learning_rate=1e-4)
+            trainer=tf.train.RMSPropOptimizer(learning_rate=1e-4)
             master_network = A3CNetwork(
                 self.state_size, self.action_size, None, 'global')
 

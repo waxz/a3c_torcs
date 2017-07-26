@@ -20,6 +20,8 @@ import snakeoil3_gym as snakeoil3
 
 from gym import spaces
 import requests
+stuck_count=0
+back_count=0
 def send_cmd(worker):
 
     start_cmd={"worker":str(worker)}
@@ -118,7 +120,7 @@ class TorcsDockerEnv(object):
                 # self.container.exec_run("kill_torcs.sh", detach=True)
                 # self.container.exec_run("start_torcs.sh", detach=True)
 
-        self.client = snakeoil3.Client(p=self.port)
+        self.client = snakeoil3.Client(p=self.port,name=self.name)
 
         self.client.MAX_STEPS = np.inf
 
@@ -175,6 +177,8 @@ class TorcsDockerEnv(object):
         sp = np.array(obs['speedX'])
         damage = np.array(obs['damage'])
         rpm = np.array(obs['rpm'])
+        angle=obs['angle']
+        print("car state speed : {}  angle: {},cos (abgle),sin(angle)".format(sp,angle,np.cos(obs['angle']),np.sin(obs['angle']) ))
 
 
 
@@ -182,12 +186,25 @@ class TorcsDockerEnv(object):
         #     np.array(obs['speedX']) *
         #     (np.cos(obs['angle']) - np.sin(obs['angle'])))
         progress = sp*np.cos(obs['angle']) - np.abs(sp*np.sin(obs['angle'])) - sp * np.abs(obs['trackPos'])
+        print("reward {} =   sp * cos(a) {} - sp  * sin(a) {} -sp *trckpos {} ".format(progress,sp*np.cos(obs['angle']) ,np.abs(sp*np.sin(obs['angle'])),sp * np.abs(obs['trackPos'])))
 
-        reward = progress
-        np.clip(reward,-1,1)
+        # reward = 
+        reward=np.clip(progress,-2,2)
+        print("clip reward",reward)
         
-        print("="*10)
-        print('get reward {}'.format(reward))
+
+        global stuck_count ,back_count
+
+        if sp <0.01:
+            stuck_count+=1
+            if stuck_count>10:
+                reward=-3
+            if stuck_count>30:
+                print("spped is too low ")
+                reward=-5
+                self.client.R.d['meta'] = True
+        else:stuck_count=0
+
         
 
         # collision detection
@@ -195,15 +212,32 @@ class TorcsDockerEnv(object):
             reward = -1
 
         # Episode is terminated if the agent runs backward
-        if np.cos(obs['angle']) < 0:
-            self.client.R.d['meta'] = True
+        # if np.cos(obs['angle']) < 0:
+        #     print("run backward")
+        #     reward=-5
+            # self.client.R.d['meta'] = True
+        # if np.cos(obs['angle']) < 0:
+        #     back_count+=1
+        #     if back_count>5:
+        #         reward=-3
+        #     if back_count>10:
+        #         print("run backward restart")
+        #         reward=-5
+        #         self.client.R.d['meta'] = True
+        # else:back_count=0
 
         if self.client.R.d['meta'] is True:
             self.client.respond_to_server()
 
         self.time_step += 1
+        
+        
+        
+        print("="*10)
+        print('get reward {}'.format(reward))
 
         return self.get_obs(), reward, self.client.R.d['meta'], {}
+
 
     def get_obs(self):
         return self.observation
