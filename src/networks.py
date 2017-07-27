@@ -12,8 +12,8 @@
 """
 
 import tensorflow as tf
-
-
+from helper import varible_aummaries,my_dense
+import math
 class Network(object):
     """Base class for the neural networks defining the number of hidden units 
     and the state, action space size
@@ -45,8 +45,9 @@ class ActorCriticBaseNetwork(Network):
 
     def _create_target_train(self):
         self.cp_trgt_wgt_frm_wgt = tf.group(
-            *[v1.assign(self.tau*v2 + (1-v1))
+            *[v1.assign(self.tau*v2 + (1-self.tau)*v1)
               for v1, v2 in zip(self.target_weights, self.weights)])
+
 
     def target_train(self, sess):
         self.is_training = True
@@ -76,6 +77,7 @@ class CriticNetwork(ActorCriticBaseNetwork):
 
     def _create_network(self, scope):
         with tf.variable_scope(scope):
+            initializer= tf.truncated_normal_initializer( mean=0.0, stddev=0.0001)
 
             state = tf.placeholder(
                 shape=[None, self.state_size], dtype=tf.float32, name='state')
@@ -83,35 +85,31 @@ class CriticNetwork(ActorCriticBaseNetwork):
                 shape=[None, self.action_size],
                 dtype=tf.float32, name='action')
 
-            s_layer1 = tf.layers.batch_normalization(
-                tf.layers.dense(
+            s_layer1 = tf.layers.dense(
                     inputs=state, activation=tf.nn.relu,
-                    units=CriticNetwork.HIDDEN1_UNITS),
-                training=self.is_training, name='s_layer_1')
+                    units=CriticNetwork.HIDDEN1_UNITS,kernel_initializer=initializer, name='s_layer_1')
 
-            s_layer2 = tf.layers.batch_normalization(
-                tf.layers.dense(
+            s_layer2 = tf.layers.dense(
                     inputs=s_layer1,
-                    units=CriticNetwork.HIDDEN2_UNITS),
-                training=self.is_training, name='s_layer_2')
+                    units=CriticNetwork.HIDDEN2_UNITS,kernel_initializer=initializer, name='s_layer_2')
 
-            a_layer = tf.layers.batch_normalization(
-                tf.layers.dense(
+            a_layer = tf.layers.dense(
                     inputs=action,
-                    units=CriticNetwork.HIDDEN2_UNITS),
-                training=self.is_training, name='a_layer')
+                    units=CriticNetwork.HIDDEN2_UNITS,kernel_initializer=initializer, name='a_layer')
 
-            c_layer = tf.layers.batch_normalization(
-                tf.layers.dense(
+            c_layer =tf.layers.dense(
                     inputs=(s_layer2 + a_layer),
                     activation=tf.nn.relu,
-                    units=CriticNetwork.HIDDEN2_UNITS),
-                training=self.is_training, name='c_layer')
+                    units=CriticNetwork.HIDDEN2_UNITS,kernel_initializer=initializer, name='c_layer')
 
-            critic = tf.layers.batch_normalization(
-                tf.layers.dense(inputs=c_layer,
-                                units=self.action_size),
-                training=self.is_training, name='critic')
+            # critic = tf.layers.batch_normalization(
+            #     tf.layers.dense(inputs=c_layer,
+            #                     units=self.action_size),
+            #     training=self.is_training, name='critic')
+
+
+            critic = tf.layers.dense(inputs=c_layer,
+                                units=self.action_size, name='critic',kernel_initializer=initializer)
 
             weights = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES,
                                         scope=scope)
@@ -155,6 +153,9 @@ class CriticNetwork(ActorCriticBaseNetwork):
         return loss
 
 
+
+
+
 class ActorNetwork(ActorCriticBaseNetwork):
     """Actor network, the training is performed using the estimated gradients
     of the policy with respect to the actions from the critic
@@ -177,32 +178,37 @@ class ActorNetwork(ActorCriticBaseNetwork):
 
     def _create_network(self, scope):
         with tf.variable_scope(scope):
+            initializer=tf.truncated_normal_initializer( mean=0.0, stddev=0.0001)
             state = tf.placeholder(tf.float32, [None, self.state_size],
                                    name='state')
 
-            hidden0 = tf.layers.batch_normalization(
-                tf.layers.dense(
+            hidden0 =tf.layers.dense(
                     inputs=state, activation=tf.nn.relu,
-                    units=ActorNetwork.HIDDEN1_UNITS),
-                training=self.is_training, name='hidden_0')
+                    units=ActorNetwork.HIDDEN1_UNITS,kernel_initializer=initializer, name='hidden_0')
 
-            hidden1 = tf.layers.batch_normalization(
-                tf.layers.dense(inputs=hidden0, activation=tf.nn.relu,
-                                units=ActorNetwork.HIDDEN2_UNITS),
-                training=self.is_training, name='hidden_1')
+            hidden1 =tf.layers.dense(inputs=hidden0, activation=tf.nn.relu,
+                                units=ActorNetwork.HIDDEN2_UNITS,kernel_initializer=initializer, name='hidden_1')
 
-            steering = tf.layers.batch_normalization(
-                tf.layers.dense(
-                    inputs=hidden1, units=1, activation=tf.nn.tanh),
-                training=self.is_training, name='steering')
+            # steering = tf.layers.batch_normalization(
+            #     tf.layers.dense(
+            #         inputs=hidden1, units=1, activation=tf.nn.tanh),
+            #     training=self.is_training, name='steering')
 
-            acceleration = tf.layers.batch_normalization(
-                tf.layers.dense(
-                    inputs=hidden1, units=1, activation=tf.nn.tanh),
-                training=self.is_training, name='acceleration')
+            # acceleration = tf.layers.batch_normalization(
+            #     tf.layers.dense(
+            #         inputs=hidden1, units=1, activation=tf.nn.tanh),
+            #     training=self.is_training, name='acceleration')
 
+            #needn't use batch normalization
+
+            hidden0=my_dense('layer1',state,[self.state_size,ActorNetwork.HIDDEN1_UNITS],layer="layer1",activation='relu')
+            hidden1=my_dense('layer2',hidden0,[ActorNetwork.HIDDEN1_UNITS,ActorNetwork.HIDDEN2_UNITS],layer="layer2",activation='relu')
+            steering=my_dense('steering',hidden1,[ActorNetwork.HIDDEN2_UNITS,1],layer="steering",activation='tanh')
+            acc=my_dense('acc',hidden1,[ActorNetwork.HIDDEN2_UNITS,1],layer="acc",activation='relu')
+            brake=my_dense('acbrakec',hidden1,[ActorNetwork.HIDDEN2_UNITS,1],layer="brake",activation='relu')
+            
             action = tf.concat(
-                [steering, acceleration], name='action', axis=1)
+                [steering, acc,brake], name='action', axis=1)
 
             weights = tf.get_collection(
                 tf.GraphKeys.TRAINABLE_VARIABLES, scope=scope)
@@ -211,8 +217,7 @@ class ActorNetwork(ActorCriticBaseNetwork):
 
     def _create_train(self):
         action_gradient = tf.placeholder(tf.float32, [None, self.action_size])
-        params_grad = tf.gradients(self.action, self.weights,
-                                   tf.negative(action_gradient))
+        params_grad = tf.gradients(self.action, self.weights,-action_gradient)
         grads = zip(params_grad, self.weights)
         optimize = self.trainer.apply_gradients(grads)
         return optimize, action_gradient
@@ -235,6 +240,8 @@ class ActorNetwork(ActorCriticBaseNetwork):
                 self.state: states, self.action_gradient: action_grads})
 
 
+
+
 class A3CNetwork(Network):
     """Network for the A3C workers and the global network """
 
@@ -246,6 +253,13 @@ class A3CNetwork(Network):
         self._create_network()
         if not (self.scope == 'global'):
             self._create_train()
+
+
+
+
+
+
+
 
     @staticmethod
     def update_target_graph(from_scope, to_scope):
@@ -262,42 +276,69 @@ class A3CNetwork(Network):
 
     def _create_network(self):
         with tf.variable_scope(self.scope):
-            initializer= tf.truncated_normal_initializer( mean=0.0, stddev=0.01)
+            initializer= tf.truncated_normal_initializer( mean=0.0, stddev=0.005)
+            # initializer= tf.truncated_normal_initializer( mean=0.0, stddev=0.01)
             # Input and visual encoding layers
-            self.inputs = tf.placeholder(
-                shape=[None, self.state_size], dtype=tf.float32)
+            with tf.variable_scope('input_layer'):
+                self.inputs = tf.placeholder(
+                    shape=[None, self.state_size], dtype=tf.float32)
 
-            s_layer1 = tf.layers.batch_normalization(
-                tf.layers.dense(
-                    inputs=self.inputs, activation=tf.nn.relu,kernel_initializer=initializer,
-                    units=A3CNetwork.HIDDEN1_UNITS),
-                training=self.is_training, name='s_layer_1')
 
-            s_layer2 = tf.layers.batch_normalization(
-                tf.layers.dense(
-                    inputs=s_layer1, activation=tf.nn.relu,kernel_initializer=initializer,
-                    units=A3CNetwork.HIDDEN2_UNITS),
-                training=self.is_training, name='s_layer_2')
+            # s_layer1 = tf.layers.batch_normalization(
+            #     tf.layers.dense(
+            #         inputs=self.inputs, activation=tf.nn.relu,kernel_initializer=initializer,
+            #         units=A3CNetwork.HIDDEN1_UNITS),
+            #     training=self.is_training, name='s_layer_1')
+            #layer1
+            # hidden1=my_dense('hidden1',state,[self.state_size,ActorNetwork.HIDDEN1_UNITS],layer="hidden1",activation='relu')
+            s_layer1=my_dense(self.scope,self.inputs,[self.state_size,A3CNetwork.HIDDEN1_UNITS],layer="layer1",activation='relu',bn=True,is_training=self.is_training)
+            s_layer2=my_dense(self.scope,s_layer1,[A3CNetwork.HIDDEN1_UNITS,A3CNetwork.HIDDEN2_UNITS],layer="layer2",activation='relu',bn=True,is_training=self.is_training)
+            
+            steering=my_dense(self.scope,s_layer2,[A3CNetwork.HIDDEN2_UNITS,1],layer="steering",activation='tanh')
+            acc=my_dense(self.scope,s_layer2,[A3CNetwork.HIDDEN2_UNITS,1],layer="acc",activation='relu')
+            brake=my_dense(self.scope,s_layer2,[A3CNetwork.HIDDEN2_UNITS,1],layer="brake",activation='relu')
+            
+            action = tf.concat([steering, acc,brake], name='action', axis=1)
 
-            # Output layers for policy and value estimations
-            self.policy_mu = tf.layers.batch_normalization(
-                tf.layers.dense(
-                    inputs=s_layer2, units=2, activation=tf.nn.tanh,kernel_initializer=initializer,),
-                training=self.is_training, name='policy_mu')
 
-            # clip the standard deviation to avoid numerical instabilites in
-            # the log probabilities
-            self.policy_sd = tf.clip_by_value(
-                tf.layers.batch_normalization(
-                    tf.layers.dense(
-                        inputs=s_layer2, units=2, activation=tf.nn.softplus,kernel_initializer=initializer,),
-                    training=self.is_training),
-                [0.05]*self.action_size, [0.25]*self.action_size,
-                name='policy_sd')
+            self.policy_mu=tf.layers.batch_normalization(action,training=self.is_training, name='policy_mu')
+            
+            
+            self.policy_sd=my_dense(self.scope,s_layer2,[A3CNetwork.HIDDEN2_UNITS,self.action_size],layer="policy_sd",activation='softplus',bn=True,is_training=self.is_training)
+            self.policy_sd_clip=tf.clip_by_value( self.policy_sd ,[0.05]*self.action_size, [0.25]*self.action_size,name='policy_sd_clip')
+            self.value=my_dense(self.scope,s_layer2,[A3CNetwork.HIDDEN2_UNITS,1],layer="value",bn=True,is_training=self.is_training)
+            
 
-            self.value = tf.layers.batch_normalization(
-                tf.layers.dense(inputs=s_layer2, units=1,kernel_initializer=initializer,),
-                training=self.is_training, name='value')
+
+            
+
+            
+
+            # # s_layer2 = tf.layers.batch_normalization(
+            # #     tf.layers.dense(
+            # #         inputs=s_layer1, activation=tf.nn.relu,kernel_initializer=initializer,
+            # #         units=A3CNetwork.HIDDEN2_UNITS),
+            # #     training=self.is_training, name='s_layer_2')
+
+            # # Output layers for policy and value estimations
+            # self.policy_mu = tf.layers.batch_normalization(
+            #     tf.layers.dense(
+            #         inputs=s_layer2, units=2, activation=tf.nn.tanh,kernel_initializer=initializer,),
+            #     training=self.is_training, name='policy_mu')
+
+            # # clip the standard deviation to avoid numerical instabilites in
+            # # the log probabilities
+            # self.policy_sd = tf.clip_by_value(
+            #     tf.layers.batch_normalization(
+            #         tf.layers.dense(
+            #             inputs=s_layer2, units=2, activation=tf.nn.softplus,kernel_initializer=initializer,),
+            #         training=self.is_training),
+            #     [0.05]*self.action_size, [0.25]*self.action_size,
+            #     name='policy_sd')
+
+            # self.value = tf.layers.batch_normalization(
+            #     tf.layers.dense(inputs=s_layer2, units=1,kernel_initializer=initializer,),
+            #     training=self.is_training, name='value')
 
             self.normal_dist = tf.contrib.distributions.Normal(
                 self.policy_mu, self.policy_sd, name='normal_dist')

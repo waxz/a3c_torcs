@@ -65,7 +65,7 @@ class DDPG(object):
             model_path='../models/ddpg', log_path='../logs/ddpg'):
 
         self.state_size = 29
-        self.action_size = 2
+        self.action_size = 3
 
         self.docker_client = docker_client
 
@@ -106,8 +106,11 @@ class DDPG(object):
         self.buff = ReplayBuffer(self.buffer_size)
         self.saver = tf.train.Saver()
         self._create_summary()
+        self.summary_histogram= tf.summary.merge_all()
+        
 
     def _create_summary(self):
+
         with tf.name_scope('summary'):
             self.loss_summary_op = tf.summary.scalar(
                 'loss', self.critic.loss, collections=['loss'])
@@ -143,10 +146,14 @@ class DDPG(object):
         noise = np.zeros(np.shape(a))
 
         noise[0] = (max(epsilon, 0) * ou_func(a[0], 0.0, 0.60, 0.30))
-        noise[1] = (max(epsilon, 0) * ou_func(a[1], 0.2, 1.00, 0.10))
+        noise[1] = (max(epsilon, 0) * ou_func(a[1], 0.5, 1.00, 0.10))
+        noise[2] = (max(epsilon, 0) * ou_func(a[2], -0.1, 1.00, 0.10))
+        
 
         a_new[0] = a[0] + noise[0]
         a_new[1] = a[1] + noise[1]
+        a_new[2] = a[2] + noise[2]
+        
 
         return a_new
 
@@ -164,6 +171,10 @@ class DDPG(object):
 
         with tf.Session(config=self.config) as sess:
             sess.run(tf.global_variables_initializer())
+            ckpt=tf.train.latest_checkpoint(self.model_path)
+            if ckpt:
+                print('load model weights from {}'.format(ckpt))
+                self.saver.restore(sess,ckpt)
 
             for i in range(self.episode_count):
 
@@ -233,12 +244,15 @@ class DDPG(object):
 
                     if j % 50:
 
-                        loss_summary, reward_summary = sess.run(
+                        loss_summary, reward_summary,histogram = sess.run(
                             [self.loss_summary_op,
-                             self.reward_summary_op],
+                             self.reward_summary_op,self.summary_histogram],
                             feed_dict={
                                 self.critic.expected_critic: y_t,
                                 self.critic.state: states,
+                                self.actor.state:states,
+                                self.actor.target_state:states,
+                                
                                 self.critic.action: actions,
                                 self.reward_ph: rewards,
                                 self.target_q_values_ph: target_q_values,
@@ -248,6 +262,8 @@ class DDPG(object):
                             loss_summary, all_steps)
                         self.summary_writer.add_summary(
                             reward_summary, all_steps)
+                        self.summary_writer.add_summary(
+                            histogram, all_steps)
                         self.summary_writer.flush()
 
                     total_reward += reward_t

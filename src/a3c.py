@@ -49,6 +49,7 @@ class Worker(object):
             self.s_size, self.action_size, self.trainer, self.name)
         self.update_local_ops = A3CNetwork.update_target_graph(
             'global', self.name)
+        self.merged=tf.summary.merge_all()
 
     def train(self, rollout, sess, gamma, bootstrap_value):
         """Train the model use discounted rewards according to
@@ -85,6 +86,11 @@ class Worker(object):
              self.local_AC.grad_norms, self.local_AC.var_norms,
              self.local_AC.apply_grads],
             feed_dict=feed_dict)
+
+        
+        # summaries= sess.run(self.merged,feed_dict=feed_dict)
+        # self.summary_writer.add_summary(summaries,self.total_steps)
+        # self.summary_writer.flush()
         self.local_AC.is_training = False
 
         return (value_loss/len(rollout), policy_loss/len(rollout),
@@ -100,7 +106,7 @@ class Worker(object):
         print("create docker successful")
 
         episode_count = sess.run(self.global_episodes)
-        total_steps = 0
+        self.total_steps = 0
         print("Starting {}".format(self.name))
 
         with sess.as_default(), sess.graph.as_default():
@@ -116,7 +122,7 @@ class Worker(object):
 
                 # reset docker every third episode to avoid the mmemory leak
                 local_episodes = 0
-                if np.mod(local_episodes, 3) == 0:
+                if np.mod(local_episodes, 30) == 0:
                     observation = env.reset(relaunch=True)
                 else:
                     observation = env.reset()
@@ -147,22 +153,22 @@ class Worker(object):
                     episode_reward += reward_t
 
                     state_t = state_t1
-                    total_steps += 1
+                    self.total_steps += 1
                     episode_step_count += 1
 
-                    if total_steps % 20:
+                    if self.total_steps % 20:
                         print(
                             "Worker", self.name,
                             "Episode", episode_count, "Step",
                             episode_step_count, "Total_Steps",
-                            total_steps, "Action", action_t[0][0],
+                            self.total_steps, "Action", action_t[0][0],
                             "Reward", reward_t)
                         summary = tf.Summary()
                         summary.value.add(
                             tag='summary/reward_1',
                             simple_value=float(reward_t))
                         self.summary_writer.add_summary(
-                            summary, total_steps)
+                            summary, self.total_steps)
 
                     self.summary_writer.flush()
 
@@ -189,7 +195,7 @@ class Worker(object):
                 self.episode_mean_values.append(
                     np.mean(episode_values))
 
-                if len(episode_buffer) >5 :
+                if len(episode_buffer) >2 :
                     # Train the netowkr use the recent episodes
                     (value_loss, policy_loss, gradient_norm,
                      variable_norm) = self.train(
@@ -262,7 +268,7 @@ class A3C(object):
         self.logdir = logdir
         self.modeldir = modeldir
         self.state_size = 29
-        self.action_size = 2
+        self.action_size = 3
 
         self.config = tf.ConfigProto()
         self.config.gpu_options.allow_growth = True
@@ -298,6 +304,14 @@ class A3C(object):
             saver = tf.train.Saver(max_to_keep=5)
 
         with tf.Session(config=self.config) as sess:
+
+            ckpt=tf.train.latest_checkpoint(self.modeldir)
+            # if ckpt:
+            #     print('load model weights from {}'.format(ckpt))
+            #     saver.restore(sess,ckpt)
+
+
+
 
             coord = tf.train.Coordinator()
 

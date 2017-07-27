@@ -113,6 +113,7 @@ class TorcsDockerEnv(object):
             self.client.respond_to_server()
 
             if relaunch is True:
+                print("relaunch torcs ")
 
                 self._set_track()
                 send_cmd(self.name)
@@ -188,43 +189,50 @@ class TorcsDockerEnv(object):
         progress = sp*np.cos(obs['angle']) - np.abs(sp*np.sin(obs['angle'])) - sp * np.abs(obs['trackPos'])
         print("reward {} =   sp * cos(a) {} - sp  * sin(a) {} -sp *trckpos {} ".format(progress,sp*np.cos(obs['angle']) ,np.abs(sp*np.sin(obs['angle'])),sp * np.abs(obs['trackPos'])))
 
-        # reward = 
-        reward=np.clip(progress,-2,2)
+        reward = progress
+        # reward=np.clip(progress,-2,2)
         print("clip reward",reward)
         
 
         global stuck_count ,back_count
 
-        if sp <0.01:
+        if reward <0.01:
             stuck_count+=1
             if stuck_count>10:
                 reward=-3
-            if stuck_count>30:
-                print("spped is too low ")
-                reward=-5
+
                 self.client.R.d['meta'] = True
-        else:stuck_count=0
+        else:
+            stuck_count=0
 
-        
-
-        # collision detection
+      
+      
+      # collision detection
         if obs['damage'] - damage_pre > 0:
             reward = -1
 
         # Episode is terminated if the agent runs backward
-        # if np.cos(obs['angle']) < 0:
-        #     print("run backward")
-        #     reward=-5
-            # self.client.R.d['meta'] = True
-        # if np.cos(obs['angle']) < 0:
-        #     back_count+=1
-        #     if back_count>5:
-        #         reward=-3
-        #     if back_count>10:
-        #         print("run backward restart")
-        #         reward=-5
-        #         self.client.R.d['meta'] = True
-        # else:back_count=0
+        if np.cos(obs['angle']) < 0:
+            print("run backward")
+            reward=-5
+            self.client.R.d['meta'] = True
+
+
+        if self.terminal_judge_start < self.time_step: # Episode terminates if the progress of agent is small
+           if progress < self.termination_limit_progress:
+               print("No progress")
+               reward=-5
+               episode_terminate = True
+               self.client.R.d['meta'] = True
+
+
+
+        if np.cos(obs['angle']) < 0:
+            
+            print("run backward restart")
+            reward=-5
+            self.client.R.d['meta'] = True
+
 
         if self.client.R.d['meta'] is True:
             self.client.respond_to_server()
@@ -245,10 +253,15 @@ class TorcsDockerEnv(object):
     def agent_to_torcs(self, u):
         accel = 0
         brake = 0
-        if u[1] >= 0:
+        if len(u)==2:
+                
+            if u[1] >= 0:
+                accel = u[1]
+            else:
+                brake = u[1]
+        if len(u)==3:
             accel = u[1]
-        else:
-            brake = u[1]
+            brake = u[2]
 
         torcs_action = {'steer': u[0], 'accel': accel, 'brake': brake}
 
