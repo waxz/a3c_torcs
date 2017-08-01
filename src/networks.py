@@ -254,6 +254,10 @@ class A3CNetwork(Network):
         if not (self.scope == 'global'):
             self._create_train()
 
+            self.merge_all=tf.summary.merge(
+            tf.get_collection(tf.GraphKeys.SUMMARIES,self.scope)
+            )
+
 
 
 
@@ -279,9 +283,8 @@ class A3CNetwork(Network):
             initializer= tf.truncated_normal_initializer( mean=0.0, stddev=0.005)
             # initializer= tf.truncated_normal_initializer( mean=0.0, stddev=0.01)
             # Input and visual encoding layers
-            with tf.variable_scope('input_layer'):
-                self.inputs = tf.placeholder(
-                    shape=[None, self.state_size], dtype=tf.float32)
+            self.inputs = tf.placeholder(
+                shape=[None, self.state_size], dtype=tf.float32,name='states_input')
 
 
             # s_layer1 = tf.layers.batch_normalization(
@@ -294,14 +297,16 @@ class A3CNetwork(Network):
             s_layer1=my_dense(self.scope,self.inputs,[self.state_size,A3CNetwork.HIDDEN1_UNITS],layer="layer1",activation='relu',bn=True,is_training=self.is_training)
             s_layer2=my_dense(self.scope,s_layer1,[A3CNetwork.HIDDEN1_UNITS,A3CNetwork.HIDDEN2_UNITS],layer="layer2",activation='relu',bn=True,is_training=self.is_training)
             
-            steering=my_dense(self.scope,s_layer2,[A3CNetwork.HIDDEN2_UNITS,1],layer="steering",activation='tanh')
-            acc=my_dense(self.scope,s_layer2,[A3CNetwork.HIDDEN2_UNITS,1],layer="acc",activation='relu')
-            brake=my_dense(self.scope,s_layer2,[A3CNetwork.HIDDEN2_UNITS,1],layer="brake",activation='relu')
+            # steering=my_dense(self.scope,s_layer2,[A3CNetwork.HIDDEN2_UNITS,1],layer="steering",activation='tanh')
+            # acc=my_dense(self.scope,s_layer2,[A3CNetwork.HIDDEN2_UNITS,1],layer="acc",activation='relu')
+            # brake=my_dense(self.scope,s_layer2,[A3CNetwork.HIDDEN2_UNITS,1],layer="brake",activation='relu')
             
-            action = tf.concat([steering, acc,brake], name='action', axis=1)
+            # action = tf.concat([steering, acc,brake], name='action', axis=1)
+            self.policy_mu=my_dense(self.scope,s_layer2,[A3CNetwork.HIDDEN2_UNITS,self.action_size],layer="policy_mu",activation='tanh',bn=True,is_training=self.is_training)
+            
 
 
-            self.policy_mu=tf.layers.batch_normalization(action,training=self.is_training, name='policy_mu')
+            # self.policy_mu=tf.layers.batch_normalization(action,training=self.is_training, name='policy_mu')
             
             
             self.policy_sd=my_dense(self.scope,s_layer2,[A3CNetwork.HIDDEN2_UNITS,self.action_size],layer="policy_sd",activation='softplus',bn=True,is_training=self.is_training)

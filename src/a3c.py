@@ -81,15 +81,15 @@ class Worker(object):
                      self.local_AC.advantages: advantages}
 
         # Do the actual optimization
-        value_loss, policy_loss, gradient_norm, value_norm, _ = sess.run(
+        value_loss, policy_loss, gradient_norm, value_norm, _ ,summaries= sess.run(
             [self.local_AC.value_loss, self.local_AC.policy_loss,
              self.local_AC.grad_norms, self.local_AC.var_norms,
-             self.local_AC.apply_grads],
+             self.local_AC.apply_grads,self.local_AC.merge_all],
             feed_dict=feed_dict)
 
         
         # summaries= sess.run(self.merged,feed_dict=feed_dict)
-        # self.summary_writer.add_summary(summaries,self.total_steps)
+        self.summary_writer.add_summary(summaries,self.total_steps)
         # self.summary_writer.flush()
         self.local_AC.is_training = False
 
@@ -195,7 +195,7 @@ class Worker(object):
                 self.episode_mean_values.append(
                     np.mean(episode_values))
 
-                if len(episode_buffer) >2 :
+                if len(episode_buffer) >0 :
                     # Train the netowkr use the recent episodes
                     (value_loss, policy_loss, gradient_norm,
                      variable_norm) = self.train(
@@ -268,7 +268,7 @@ class A3C(object):
         self.logdir = logdir
         self.modeldir = modeldir
         self.state_size = 29
-        self.action_size = 3
+        self.action_size = 2
 
         self.config = tf.ConfigProto()
         self.config.gpu_options.allow_growth = True
@@ -306,9 +306,9 @@ class A3C(object):
         with tf.Session(config=self.config) as sess:
 
             ckpt=tf.train.latest_checkpoint(self.modeldir)
-            # if ckpt:
-            #     print('load model weights from {}'.format(ckpt))
-            #     saver.restore(sess,ckpt)
+            if ckpt:
+                print('load model weights from {}'.format(ckpt))
+                saver.restore(sess,ckpt)
 
 
 

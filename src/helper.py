@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import tensorflow as tf
 def varible_aummaries(var,scope):
     with tf.name_scope('summaries'):
@@ -27,7 +28,7 @@ def my_dense(scope,inputs,w_shape,layer="layer1",activation='relu',bn=False,is_t
         
 
         # s_layer1=tf.layers.batch_normalization(layer_1,training=self.is_training, name='s_layer_1')
-        if not (scope == 'global'):
+        if not (scope.startswith('global')):
             varible_aummaries(weights,'weight')
             varible_aummaries(biases,'biases')
             varible_aummaries(hidden,layer)
